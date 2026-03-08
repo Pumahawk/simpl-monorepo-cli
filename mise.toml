@@ -1,0 +1,3 @@
+[tools]
+go = "1.25.4"
+"go:github.com/spf13/cobra-cli" = "latest"
