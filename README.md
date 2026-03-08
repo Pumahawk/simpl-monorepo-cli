@@ -1,3 +1,12 @@
+
+> **⚠️ Work in Progress**
+> This repository is currently in an early development stage and is **not yet stable or feature-complete**.
+> The codebase may change frequently, contain incomplete implementations, or lack documentation.
+>
+> The repository is public to **track development progress and experiments** while the CLI is being built.
+>
+> If you are browsing the project, please consider the current state as **work in progress**.
+
 # Esperienza dello sviluppatore
 
 Il programmatore può trovarsi in questi stati:
