@@ -36,7 +36,13 @@ to quickly create a Cobra application.`,
 		dep := doctor.FindMissingDependencies()
 		if dep != nil {
 			fmt.Print("Find some missing dependencies\n")
-			doctor.SolveDependecies(dep)
+			errors := doctor.SolveDependecies(dep)
+			if errors != nil {
+				fmt.Printf("Unable to solve all dependencies\n")
+				for _, err := range errors {
+					fmt.Printf("error: %s\n", err)
+				}
+			}
 		}
 	},
 }

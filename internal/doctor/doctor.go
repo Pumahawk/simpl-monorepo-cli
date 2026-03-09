@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 func FindMissingRequirements() []error {
@@ -31,7 +32,21 @@ func checkDockerServerUp() error {
 func FindMissingDependencies() []string {
 	var missing []string
 	if _, err := exec.LookPath("mise"); err != nil {
-		return append(missing, "mise")
+		misePath, err := customMiseLocation()
+		if err != nil {
+			missing = append(missing, "mise")
+		} else {
+			info, err := os.Stat(misePath)
+			if err != nil {
+				fmt.Printf("Invalid path info %s. %s\n", misePath, err)
+				missing = append(missing, "mise")
+			} else {
+				mode := info.Mode()
+				if mode&0111 != 0 {
+					missing = append(missing, "mise")
+				}
+			}
+		}
 	}
 	return missing
 }
@@ -54,31 +69,46 @@ func SolveDependecies(names []string) []error {
 func solveMiseDependecy() error {
 	res, err := http.Get("https://github.com/jdx/mise/releases/download/v2026.3.5/mise-v2026.3.5-linux-x64")
 	if err != nil {
-		return fmt.Errorf("Unable to download mise. %w", err)
+		return fmt.Errorf("Unable to download mise. Error on get request. %w", err)
 	}
 	if res.StatusCode != 200 {
 		return fmt.Errorf("Unable to download mise. Status code not 200.")
 	}
 	miseFile, err := createMiseLocation()
+	if err != nil {
+		return fmt.Errorf("Unable to create mise file target. %s", err)
+	}
 	if _, err := io.Copy(miseFile, res.Body); err != nil {
-		return fmt.Errorf("Unable to download mise. %w", err)
+		return fmt.Errorf("Unable to download mise. Error on write file. %w", err)
 	}
 	return nil
 }
 
 func createMiseLocation() (*os.File, error) {
-	path, err := os.UserHomeDir()
+	path, err := customMiseLocation()
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get user home. %w", err)
 	}
-	dirPath := path + "/.simpl-monorepo-cli"
-	if err := os.Mkdir(dirPath, 0755); err != nil {
-		return nil, fmt.Errorf("Unable to create configuration directory. %w", err)
+
+	parent := filepath.Dir(path)
+	if _, err := os.Stat(parent); err != nil {
+		if err := os.Mkdir(parent, 0755); err != nil {
+			return nil, fmt.Errorf("Unable to create configuration directory. %w", err)
+		}
 	}
 
-	file, err := os.Create(dirPath + "/mise")
+	filepath.Dir(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to create file mise. %w", err)
 	}
 	return file, nil
+}
+
+func customMiseLocation() (string, error) {
+	path, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("Unable to get user home. %w", err)
+	}
+	return path + "/.simpl-monorepo-cli/mise", nil
 }
