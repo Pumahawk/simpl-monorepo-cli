@@ -32,8 +32,12 @@ func checkDockerServerUp() error {
 func FindMissingDependencies() []string {
 	var missing []string
 	if err := checkMiseDependency(); err != nil {
-		fmt.Printf("Failed check mise dependency. %s", err)
+		fmt.Printf("Failed check mise dependency. %s\n", err)
 		missing = append(missing, "mise")
+	}
+	if err := checkKubectlDependency(); err != nil {
+		fmt.Printf("Failed check kubectl dependency. %s\n", err)
+		missing = append(missing, "kubectl")
 	}
 	return missing
 }
@@ -58,6 +62,17 @@ func checkMiseDependency() error {
 	return nil
 }
 
+func checkKubectlDependency() error {
+	cmd, err := miseCommand("which", "kubectl")
+	if err != nil {
+		return fmt.Errorf("Unable to create mise command. %w", err)
+	}
+	if err = cmd.Run(); err != nil {
+		return fmt.Errorf("Not found kubectl using mise where. %w", err)
+	}
+	return nil
+}
+
 func SolveDependecies(names []string) []error {
 	var errors []error
 	fmt.Print("Solve dependecies\n")
@@ -67,6 +82,10 @@ func SolveDependecies(names []string) []error {
 		case "mise":
 			if err := solveMiseDependecy(); err != nil {
 				errors = append(errors, fmt.Errorf("Unable to solve mise. %w", err))
+			}
+		case "kubectl":
+			if err := solveKubectlDependecy(); err != nil {
+				errors = append(errors, fmt.Errorf("Unable to solve kubectl. %w", err))
 			}
 		}
 	}
@@ -87,6 +106,20 @@ func solveMiseDependecy() error {
 	}
 	if _, err := io.Copy(miseFile, res.Body); err != nil {
 		return fmt.Errorf("Unable to download mise. Error on write file. %w", err)
+	}
+	return nil
+}
+
+func solveKubectlDependecy() error {
+	cmd, err := miseCommand("install", "kubectl@latest")
+	if err != nil {
+		return fmt.Errorf("Unable to create mise install command. %w", err)
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("Unable to install kubectl using mise. %w", err)
 	}
 	return nil
 }
@@ -118,4 +151,16 @@ func customMiseLocation() (string, error) {
 		return "", fmt.Errorf("Unable to get user home. %w", err)
 	}
 	return path + "/.simpl-monorepo-cli/mise", nil
+}
+
+func miseCommand(arg ...string) (*exec.Cmd, error) {
+	var path string
+	path, err := exec.LookPath("mise")
+	if err != nil {
+		path, err = customMiseLocation()
+		if err != nil {
+			return nil, fmt.Errorf("Unable to find mise location. %w", err)
+		}
+	}
+	return exec.Command(path, arg...), nil
 }
