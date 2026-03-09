@@ -9,6 +9,11 @@ import (
 	"path/filepath"
 )
 
+var DependencyList = [...]Dependency{
+	miseD,
+	kubectlD,
+}
+
 func FindMissingRequirements() []error {
 	_, err := exec.LookPath("docker")
 	var errors []error
@@ -29,99 +34,27 @@ func checkDockerServerUp() error {
 	return nil
 }
 
-func FindMissingDependencies() []string {
-	var missing []string
-	if err := checkMiseDependency(); err != nil {
-		fmt.Printf("Failed check mise dependency. %s\n", err)
-		missing = append(missing, "mise")
-	}
-	if err := checkKubectlDependency(); err != nil {
-		fmt.Printf("Failed check kubectl dependency. %s\n", err)
-		missing = append(missing, "kubectl")
+func FindMissingDependencies() []Dependency {
+	var missing []Dependency
+	for _, dep := range DependencyList {
+		if err := dep.Check(); err != nil {
+			fmt.Printf("Failed check %s dependency. %s\n", dep.Name, err)
+			missing = append(missing, dep)
+		}
 	}
 	return missing
 }
 
-func checkMiseDependency() error {
-	if _, err := exec.LookPath("mise"); err != nil {
-		misePath, err := customMiseLocation()
-		if err != nil {
-			return fmt.Errorf("Invalid custom mise location. %w", err)
-		} else {
-			info, err := os.Stat(misePath)
-			if err != nil {
-				return fmt.Errorf("Invalid path info %s. %s\n", misePath, err)
-			} else {
-				mode := info.Mode()
-				if mode&0111 == 0 {
-					return fmt.Errorf("mise is not a exec file")
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func checkKubectlDependency() error {
-	cmd, err := miseCommand("which", "kubectl")
-	if err != nil {
-		return fmt.Errorf("Unable to create mise command. %w", err)
-	}
-	if err = cmd.Run(); err != nil {
-		return fmt.Errorf("Not found kubectl using mise where. %w", err)
-	}
-	return nil
-}
-
-func SolveDependecies(names []string) []error {
+func SolveDependecies(dependecies []Dependency) []error {
 	var errors []error
 	fmt.Print("Solve dependecies\n")
-	for _, name := range names {
-		fmt.Printf("Solve %s\n", name)
-		switch name {
-		case "mise":
-			if err := solveMiseDependecy(); err != nil {
-				errors = append(errors, fmt.Errorf("Unable to solve mise. %w", err))
-			}
-		case "kubectl":
-			if err := solveKubectlDependecy(); err != nil {
-				errors = append(errors, fmt.Errorf("Unable to solve kubectl. %w", err))
-			}
+	for _, dep := range dependecies {
+		fmt.Printf("Solve %s\n", dep.Name)
+		if err := dep.Solve(); err != nil {
+			errors = append(errors, fmt.Errorf("Unable to solve %s. %w", dep.Name, err))
 		}
 	}
 	return errors
-}
-
-func solveMiseDependecy() error {
-	res, err := http.Get("https://github.com/jdx/mise/releases/download/v2026.3.5/mise-v2026.3.5-linux-x64")
-	if err != nil {
-		return fmt.Errorf("Unable to download mise. Error on get request. %w", err)
-	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("Unable to download mise. Status code not 200.")
-	}
-	miseFile, err := createMiseLocation()
-	if err != nil {
-		return fmt.Errorf("Unable to create mise file target. %s", err)
-	}
-	if _, err := io.Copy(miseFile, res.Body); err != nil {
-		return fmt.Errorf("Unable to download mise. Error on write file. %w", err)
-	}
-	return nil
-}
-
-func solveKubectlDependecy() error {
-	cmd, err := miseCommand("install", "kubectl@latest")
-	if err != nil {
-		return fmt.Errorf("Unable to create mise install command. %w", err)
-	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("Unable to install kubectl using mise. %w", err)
-	}
-	return nil
 }
 
 func createMiseLocation() (*os.File, error) {
@@ -163,4 +96,77 @@ func miseCommand(arg ...string) (*exec.Cmd, error) {
 		}
 	}
 	return exec.Command(path, arg...), nil
+}
+
+type Dependency struct {
+	Name  string
+	Check func() error
+	Solve func() error
+}
+
+var miseD = Dependency{
+	Name: "mise",
+	Check: func() error {
+		if _, err := exec.LookPath("mise"); err != nil {
+			misePath, err := customMiseLocation()
+			if err != nil {
+				return fmt.Errorf("Invalid custom mise location. %w", err)
+			} else {
+				info, err := os.Stat(misePath)
+				if err != nil {
+					return fmt.Errorf("Invalid path info %s. %s\n", misePath, err)
+				} else {
+					mode := info.Mode()
+					if mode&0111 == 0 {
+						return fmt.Errorf("mise is not a exec file")
+					}
+				}
+			}
+		}
+		return nil
+	},
+	Solve: func() error {
+		res, err := http.Get("https://github.com/jdx/mise/releases/download/v2026.3.5/mise-v2026.3.5-linux-x64")
+		if err != nil {
+			return fmt.Errorf("Unable to download mise. Error on get request. %w", err)
+		}
+		if res.StatusCode != 200 {
+			return fmt.Errorf("Unable to download mise. Status code not 200.")
+		}
+		miseFile, err := createMiseLocation()
+		if err != nil {
+			return fmt.Errorf("Unable to create mise file target. %s", err)
+		}
+		if _, err := io.Copy(miseFile, res.Body); err != nil {
+			return fmt.Errorf("Unable to download mise. Error on write file. %w", err)
+		}
+		return nil
+	},
+}
+
+var kubectlD = Dependency{
+	Name: "kubectl",
+	Check: func() error {
+		cmd, err := miseCommand("which", "kubectl")
+		if err != nil {
+			return fmt.Errorf("Unable to create mise command. %w", err)
+		}
+		if err = cmd.Run(); err != nil {
+			return fmt.Errorf("Not found kubectl using mise where. %w", err)
+		}
+		return nil
+	},
+	Solve: func() error {
+		cmd, err := miseCommand("install", "kubectl@latest")
+		if err != nil {
+			return fmt.Errorf("Unable to create mise install command. %w", err)
+		}
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return fmt.Errorf("Unable to install kubectl using mise. %w", err)
+		}
+		return nil
+	},
 }
