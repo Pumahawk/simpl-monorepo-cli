@@ -31,24 +31,31 @@ func checkDockerServerUp() error {
 
 func FindMissingDependencies() []string {
 	var missing []string
+	if err := checkMiseDependency(); err != nil {
+		fmt.Printf("Failed check mise dependency. %s", err)
+		missing = append(missing, "mise")
+	}
+	return missing
+}
+
+func checkMiseDependency() error {
 	if _, err := exec.LookPath("mise"); err != nil {
 		misePath, err := customMiseLocation()
 		if err != nil {
-			missing = append(missing, "mise")
+			return fmt.Errorf("Invalid custom mise location. %w", err)
 		} else {
 			info, err := os.Stat(misePath)
 			if err != nil {
-				fmt.Printf("Invalid path info %s. %s\n", misePath, err)
-				missing = append(missing, "mise")
+				return fmt.Errorf("Invalid path info %s. %s\n", misePath, err)
 			} else {
 				mode := info.Mode()
-				if mode&0111 != 0 {
-					missing = append(missing, "mise")
+				if mode&0111 == 0 {
+					return fmt.Errorf("mise is not a exec file")
 				}
 			}
 		}
 	}
-	return missing
+	return nil
 }
 
 func SolveDependecies(names []string) []error {
