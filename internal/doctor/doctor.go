@@ -11,7 +11,8 @@ import (
 
 var DependencyList = [...]Dependency{
 	miseD,
-	kubectlD,
+	NewMiseDependency("kubectl"),
+	NewMiseDependency("helm"),
 }
 
 func FindMissingRequirements() []error {
@@ -126,7 +127,7 @@ var miseD = Dependency{
 		return nil
 	},
 	Solve: func() error {
-		res, err := http.Get("https://github.com/jdx/mise/releases/download/v2026.3.5/mise-v2026.3.5-linux-x64")
+		res, err := http.Get("https://github.com/jdx/mise/releases/download/v2026.3.6/mise-v2026.3.6-linux-x64")
 		if err != nil {
 			return fmt.Errorf("Unable to download mise. Error on get request. %w", err)
 		}
@@ -137,6 +138,7 @@ var miseD = Dependency{
 		if err != nil {
 			return fmt.Errorf("Unable to create mise file target. %s", err)
 		}
+		defer miseFile.Close()
 		if _, err := io.Copy(miseFile, res.Body); err != nil {
 			return fmt.Errorf("Unable to download mise. Error on write file. %w", err)
 		}
@@ -144,29 +146,31 @@ var miseD = Dependency{
 	},
 }
 
-var kubectlD = Dependency{
-	Name: "kubectl",
-	Check: func() error {
-		cmd, err := miseCommand("which", "kubectl")
-		if err != nil {
-			return fmt.Errorf("Unable to create mise command. %w", err)
-		}
-		if err = cmd.Run(); err != nil {
-			return fmt.Errorf("Not found kubectl using mise where. %w", err)
-		}
-		return nil
-	},
-	Solve: func() error {
-		cmd, err := miseCommand("install", "kubectl@latest")
-		if err != nil {
-			return fmt.Errorf("Unable to create mise install command. %w", err)
-		}
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			return fmt.Errorf("Unable to install kubectl using mise. %w", err)
-		}
-		return nil
-	},
+func NewMiseDependency(name string) Dependency {
+	return Dependency{
+		Name: name,
+		Check: func() error {
+			cmd, err := miseCommand("where", name)
+			if err != nil {
+				return fmt.Errorf("Unable to create mise command. %w", err)
+			}
+			if err = cmd.Run(); err != nil {
+				return fmt.Errorf("Not found %s using mise where. %w", name, err)
+			}
+			return nil
+		},
+		Solve: func() error {
+			cmd, err := miseCommand("install", name)
+			if err != nil {
+				return fmt.Errorf("Unable to create mise install command. %w", err)
+			}
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			if err != nil {
+				return fmt.Errorf("Unable to install %s using mise. %w", name, err)
+			}
+			return nil
+		},
+	}
 }
